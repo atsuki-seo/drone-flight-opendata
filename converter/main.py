@@ -15,54 +15,63 @@ from converter.enrichers import geocoder
 from converter.output import writer
 
 
-def find_flight_pairs(input_dir: Path) -> list[dict]:
-    """入力ディレクトリからCSV/SRTペアを探索"""
-    pairs = []
+def _collect_from_dir(
+    target_dir: Path, csv_suffix: str, pairs: list[dict],
+) -> None:
+    """1ディレクトリ内のCSV/SRTペアを収集してpairsに追加"""
+    csv_glob = f"*{csv_suffix}.csv" if csv_suffix else "*.csv"
+    csvs = sorted(target_dir.glob(csv_glob))
+    srts = {s.stem: s for s in target_dir.glob("*.SRT")}
+    srts.update({s.stem: s for s in target_dir.glob("*.srt")})
 
-    for route_dir in sorted(input_dir.iterdir()):
-        if not route_dir.is_dir():
+    for csv_path in csvs:
+        prefix = csv_path.stem
+        if csv_suffix:
+            prefix = prefix.removesuffix(csv_suffix)
+        srt_path = srts.get(prefix)
+
+        pairs.append({
+            "csv_path": csv_path,
+            "srt_path": srt_path,
+            "prefix": prefix,
+        })
+
+
+def find_flight_pairs(input_dir: Path, csv_suffix: str = "-テレメトリ") -> list[dict]:
+    """入力ディレクトリからCSV/SRTペアを探索
+
+    input_dir直下のファイルとサブディレクトリ内のファイルの両方を探索する。
+    """
+    pairs: list[dict] = []
+
+    # input_dir直下のファイルを探索（フラット構造対応）
+    _collect_from_dir(input_dir, csv_suffix, pairs)
+
+    # サブディレクトリ内のファイルを探索
+    for sub_dir in sorted(input_dir.iterdir()):
+        if not sub_dir.is_dir():
             continue
-
-        csvs = sorted(route_dir.glob("*テレメトリ.csv"))
-        srts = {s.stem: s for s in route_dir.glob("*.SRT")}
-
-        for csv_path in csvs:
-            # "石川-ルート1-1-テレメトリ.csv" → prefix "石川-ルート1-1"
-            prefix = csv_path.stem.replace("-テレメトリ", "")
-            srt_path = srts.get(prefix)
-
-            pairs.append({
-                "csv_path": csv_path,
-                "srt_path": srt_path,
-                "prefix": prefix,
-                "route_dir": route_dir.name,
-            })
+        _collect_from_dir(sub_dir, csv_suffix, pairs)
 
     return pairs
 
 
-def generate_flight_id(prefix: str, region_name: str) -> str:
-    """日本語ファイル名プレフィックスからflight_idを生成
+def generate_flight_id(prefix: str) -> str:
+    """ファイル名プレフィックスからflight_idを生成
 
-    例: "石川-ルート1-1" + region_name="ishikawa" → "ishikawa-route1-1"
+    プレフィックスをそのままflight_idとして使用する。
+    ^[a-z][a-z0-9-]+$ に準拠している必要がある。
+
+    例: "sample-route1-1" → "sample-route1-1"
     """
-    # "石川-ルート1-1" → ["石川", "ルート1", "1"]
-    parts = prefix.split("-")
+    flight_id = prefix
 
-    # ルート部分を変換: "ルート1" → "route1"
-    route_parts = []
-    for part in parts[1:]:
-        m = re.match(r"ルート(\d+)", part)
-        if m:
-            route_parts.append(f"route{m.group(1)}")
-        else:
-            route_parts.append(part)
-
-    flight_id = f"{region_name}-{'-'.join(route_parts)}"
-
-    # バリデーション
     if not re.match(r"^[a-z][a-z0-9-]+$", flight_id):
-        raise ValueError(f"Invalid flight_id: {flight_id}")
+        raise ValueError(
+            f"Invalid flight_id: '{flight_id}' — "
+            f"ファイル名プレフィックスは小文字英字で始まり、"
+            f"小文字英数字とハイフンのみ使用可能です"
+        )
 
     return flight_id
 
@@ -114,7 +123,7 @@ def _merge_camera_to_track(
 
 
 def process_flight(
-    pair: dict, region_name: str, flight_log_schema: dict | None,
+    pair: dict, flight_log_schema: dict | None,
     geocode_cache: dict[str, str] | None = None,
 ) -> dict:
     """1フライト分の変換処理"""
@@ -124,7 +133,7 @@ def process_flight(
     if pair["srt_path"] is not None:
         srt_df = dji_srt.parse(str(pair["srt_path"]))
 
-    flight_id = generate_flight_id(pair["prefix"], region_name)
+    flight_id = generate_flight_id(pair["prefix"])
 
     has_srt = srt_df is not None and not srt_df.empty
     original_format = "dji_csv_srt" if has_srt else "dji_csv"
@@ -153,9 +162,9 @@ def process_flight(
 
 def main():
     parser = argparse.ArgumentParser(description="ドローン飛行ログをYANYANMA形式に変換")
-    parser.add_argument("input_dir", help="入力ディレクトリ（例: data/1-石川県）")
+    parser.add_argument("input_dir", help="入力ディレクトリ（例: data/sample）")
     parser.add_argument("output_dir", help="出力ディレクトリ")
-    parser.add_argument("--region", required=True, help="地域英名（例: ishikawa）")
+    parser.add_argument("--csv-suffix", default="-テレメトリ", help="CSVファイル名のサフィックス（デフォルト: -テレメトリ）")
     parser.add_argument("--no-geocode", action="store_true", help="逆ジオコーディングをスキップ")
     args = parser.parse_args()
 
@@ -186,16 +195,16 @@ def main():
         print("Geocoding: disabled")
 
     # ファイルペアを探索
-    pairs = find_flight_pairs(input_dir)
+    pairs = find_flight_pairs(input_dir, args.csv_suffix)
     print(f"Found {len(pairs)} flight(s)")
 
     # 各フライトを処理
     all_flights = []
     for pair in pairs:
-        flight_id = generate_flight_id(pair["prefix"], args.region)
+        flight_id = generate_flight_id(pair["prefix"])
         print(f"  Processing: {flight_id}")
 
-        flight_data = process_flight(pair, args.region, flight_log_schema, geocode_cache)
+        flight_data = process_flight(pair, flight_log_schema, geocode_cache)
 
         # 個別JSON出力
         out_path = writer.write_flight(flight_data, output_dir, flight_log_schema)
