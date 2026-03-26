@@ -199,16 +199,15 @@ def haversine(lat1, lon1, lat2, lon2):
 ### `converter/main.py`
 
 ```
-CLI: python -m converter.main <input_dir> <output_dir>
+CLI: python -m converter.main <input_dir> <output_dir> [--csv-suffix SUFFIX] [--no-geocode]
 ```
 
 処理フロー:
-1. `input_dir` 配下のCSV/SRTファイルを探索
-2. ファイル名から `flight_id` を生成
-   - 形式: `{地域英名}-route{番号}-{フライト番号}`（例: `ishikawa-route1-1`）
+1. `input_dir` 直下およびサブディレクトリ内のCSV/SRTファイルを探索
+2. ファイル名プレフィックス（CSVサフィックス除去後）をそのまま `flight_id` として使用
    - 小文字英数字+ハイフンのみ使用（正規表現: `^[a-z][a-z0-9-]+$`）
-   - 日本語ファイル名からの変換テーブルを config.py に定義
-3. CSVとSRTをペアリング（同名ベースでマッチ）
+   - CSVサフィックスは `--csv-suffix` で指定（デフォルト: `-テレメトリ`）
+3. CSVとSRTをペアリング（同一プレフィックスでマッチ）
 4. 各ペアに対して: パース → 分析 → 付加 → 出力
    - `original_format` の決定: CSVのみ → `"dji_csv"`、CSV+SRT → `"dji_csv_srt"`
 5. 全フライトの `index.json` を生成

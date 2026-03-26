@@ -49,13 +49,13 @@ OpenAI Function Calling 互換の JSON Schema 形式で定義:
 
 | ファイル | 内容 |
 |---------|------|
-| `サンプル-ルート1-1-テレメトリ.csv` | 10行のダミーテレメトリ（架空座標） |
-| `サンプル-ルート1-1.SRT` | 300フレーム（10秒分）のダミーSRT |
+| `sample-route1-1-テレメトリ.csv` | 10行のダミーテレメトリ（架空座標） |
+| `sample-route1-1.SRT` | 300フレーム（10秒分）のダミーSRT |
 
 ### 変換実行例
 
 ```bash
-python -m converter.main data/sample output --region sample --no-geocode
+python -m converter.main data/sample output --no-geocode
 ```
 
 ### 入力データフォーマット
