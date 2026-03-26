@@ -1,0 +1,65 @@
+{
+  "name": "yanyanma_flight_index",
+  "description": "複数フライトのインデックス。全フライトの概要を一覧し、LLMが全体像を把握するために使用。",
+  "parameters": {
+    "type": "object",
+    "required": ["schema_version", "generated_at", "total_flights", "total_duration_sec", "flights"],
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "description": "スキーマバージョン（セマンティックバージョニング）",
+        "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      },
+      "generated_at": {
+        "type": "string",
+        "description": "インデックス生成日時（UTC ISO 8601）",
+        "format": "date-time"
+      },
+      "total_flights": {
+        "type": "integer",
+        "description": "総フライト数"
+      },
+      "total_duration_sec": {
+        "type": "number",
+        "description": "全フライトの合計飛行時間（秒）"
+      },
+      "coverage_bbox": {
+        "type": "object",
+        "description": "全フライトを包含するバウンディングボックス（north >= south, east >= west であること）",
+        "properties": {
+          "north": { "type": "number" },
+          "south": { "type": "number" },
+          "east": { "type": "number" },
+          "west": { "type": "number" }
+        }
+      },
+      "flights": {
+        "type": "array",
+        "description": "各フライトのsummary情報の配列",
+        "items": {
+          "type": "object",
+          "required": ["flight_id", "date", "duration_sec", "bbox", "detail_file"],
+          "properties": {
+            "flight_id": { "type": "string" },
+            "date": { "type": "string", "format": "date" },
+            "start_time_utc": { "type": "string", "format": "date-time" },
+            "duration_sec": { "type": "number" },
+            "region": { "type": ["string", "null"] },
+            "bbox": {
+              "type": "object",
+              "properties": {
+                "north": { "type": "number" },
+                "south": { "type": "number" },
+                "east": { "type": "number" },
+                "west": { "type": "number" }
+              }
+            },
+            "total_distance_m": { "type": "number" },
+            "hover_count": { "type": "integer", "description": "ホバリング地点数" },
+            "detail_file": { "type": "string", "description": "詳細JSONファイルへのパス" }
+          }
+        }
+      }
+    }
+  }
+}

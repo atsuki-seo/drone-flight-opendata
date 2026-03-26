@@ -1,0 +1,192 @@
+{
+  "name": "yanyanma_flight_log",
+  "description": "ドローンの1フライト分の飛行ログを構造化したオープンデータ。災害調査・巡回等の飛行データをLLMが分析可能な形式で提供する。",
+  "parameters": {
+    "type": "object",
+    "required": ["schema_version", "flight_id", "source", "summary", "hover_points", "camera_events", "track"],
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "description": "スキーマバージョン（セマンティックバージョニング）",
+        "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      },
+      "flight_id": {
+        "type": "string",
+        "description": "フライトの一意識別子（例: ishikawa-route1-1）",
+        "pattern": "^[a-z][a-z0-9-]+$"
+      },
+      "source": {
+        "type": "object",
+        "description": "元データファイルの参照情報",
+        "required": ["telemetry_file"],
+        "properties": {
+          "telemetry_file": {
+            "type": "string",
+            "description": "テレメトリCSVのファイル名"
+          },
+          "srt_file": {
+            "type": ["string", "null"],
+            "description": "SRTファイル名（存在しない場合null）"
+          },
+          "video_file": {
+            "type": ["string", "null"],
+            "description": "動画ファイル名（存在しない場合null）"
+          },
+          "original_format": {
+            "type": "string",
+            "description": "元データの形式",
+            "enum": ["dji_csv", "dji_csv_srt", "mavlink", "ulog", "other"]
+          }
+        }
+      },
+      "summary": {
+        "type": "object",
+        "description": "フライト全体のサマリー。LLMにはこのセクションだけ渡せば全体像を把握可能。",
+        "required": [
+          "date", "start_time_utc", "end_time_utc", "duration_sec",
+          "start_point", "end_point", "bbox",
+          "total_distance_m", "max_alt_m", "min_alt_m", "max_speed_ms", "avg_speed_ms"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "飛行日（ISO 8601形式 YYYY-MM-DD）"
+          },
+          "start_time_utc": {
+            "type": "string",
+            "format": "date-time",
+            "description": "飛行開始時刻（UTC ISO 8601）"
+          },
+          "end_time_utc": {
+            "type": "string",
+            "format": "date-time",
+            "description": "飛行終了時刻（UTC ISO 8601）"
+          },
+          "duration_sec": {
+            "type": "number",
+            "description": "総飛行時間（秒）"
+          },
+          "region": {
+            "type": ["string", "null"],
+            "description": "逆ジオコーディングによる地域名（例: 石川県輪島市門前町）"
+          },
+          "start_point": {
+            "$ref": "#/$defs/geo_point",
+            "description": "離陸地点"
+          },
+          "end_point": {
+            "$ref": "#/$defs/geo_point",
+            "description": "着陸/最終記録地点"
+          },
+          "bbox": {
+            "type": "object",
+            "description": "飛行範囲のバウンディングボックス（north >= south, east >= west であること）",
+            "required": ["north", "south", "east", "west"],
+            "properties": {
+              "north": { "type": "number" },
+              "south": { "type": "number" },
+              "east": { "type": "number" },
+              "west": { "type": "number" }
+            }
+          },
+          "total_distance_m": {
+            "type": "number",
+            "description": "総飛行距離（メートル）"
+          },
+          "max_alt_m": {
+            "type": "number",
+            "description": "最高高度（メートル、MSL）"
+          },
+          "min_alt_m": {
+            "type": "number",
+            "description": "最低高度（メートル、MSL）"
+          },
+          "max_speed_ms": {
+            "type": "number",
+            "description": "最高速度（m/s）"
+          },
+          "avg_speed_ms": {
+            "type": "number",
+            "description": "平均速度（m/s）"
+          },
+          "satellites_avg": {
+            "type": ["number", "null"],
+            "description": "平均捕捉衛星数（データがない場合null）"
+          },
+          "gps_accuracy_h_m": {
+            "type": ["number", "null"],
+            "description": "平均水平精度（メートル、データがない場合null）"
+          }
+        }
+      },
+      "hover_points": {
+        "type": "array",
+        "description": "ホバリング（速度≒0がN秒以上継続）した地点のリスト。操縦者が注視した場所を示す。",
+        "items": {
+          "type": "object",
+          "required": ["lat", "lon", "start_time_utc", "duration_sec"],
+          "properties": {
+            "lat": { "type": "number" },
+            "lon": { "type": "number" },
+            "alt_m": { "type": "number", "description": "高度（メートル、MSL）" },
+            "address": { "type": ["string", "null"], "description": "逆ジオコーディング住所" },
+            "start_time_utc": { "type": "string", "format": "date-time" },
+            "duration_sec": { "type": "number" },
+            "camera_yaw_deg": {
+              "type": ["number", "null"],
+              "description": "ホバリング中のカメラ方位角（度、北=0）。SRTデータがある場合のみ。"
+            }
+          }
+        }
+      },
+      "camera_events": {
+        "type": "array",
+        "description": "カメラの向きが急変した地点。SRTデータがある場合のみ。",
+        "items": {
+          "type": "object",
+          "required": ["time_utc", "lat", "lon", "yaw_from_deg", "yaw_to_deg"],
+          "properties": {
+            "time_utc": { "type": "string", "format": "date-time" },
+            "lat": { "type": "number" },
+            "lon": { "type": "number" },
+            "yaw_from_deg": { "type": "number" },
+            "yaw_to_deg": { "type": "number" },
+            "delta_deg": { "type": "number", "description": "変化量（度）" }
+          }
+        }
+      },
+      "track": {
+        "type": "array",
+        "description": "飛行経路のポイント列。デフォルトは1秒間隔にダウンサンプリング。",
+        "items": {
+          "$ref": "#/$defs/track_point"
+        }
+      }
+    },
+    "$defs": {
+      "geo_point": {
+        "type": "object",
+        "required": ["lat", "lon"],
+        "properties": {
+          "lat": { "type": "number", "description": "緯度（WGS84）" },
+          "lon": { "type": "number", "description": "経度（WGS84）" },
+          "alt_m": { "type": ["number", "null"], "description": "高度（メートル、MSL）" }
+        }
+      },
+      "track_point": {
+        "type": "object",
+        "required": ["t", "lat", "lon"],
+        "properties": {
+          "t": { "type": "string", "format": "date-time", "description": "タイムスタンプ（UTC ISO 8601）" },
+          "lat": { "type": "number" },
+          "lon": { "type": "number" },
+          "alt_m": { "type": ["number", "null"] },
+          "speed_ms": { "type": ["number", "null"] },
+          "camera_yaw_deg": { "type": ["number", "null"], "description": "SRT由来のジンバル方位角" },
+          "camera_pitch_deg": { "type": ["number", "null"], "description": "SRT由来のジンバル俯角" }
+        }
+      }
+    }
+  }
+}
